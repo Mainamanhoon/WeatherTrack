@@ -7,12 +7,16 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import com.example.myapplication.common.Resource;
+import com.example.myapplication.data.local.WeatherDao;
+import com.example.myapplication.data.local.WeatherEntity;
 import com.example.myapplication.data.model.WeatherResponse;
 import com.example.myapplication.data.network.ApiService;
 import com.example.myapplication.domain.WeatherRepository;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 import javax.inject.Inject;
 
@@ -22,13 +26,18 @@ import retrofit2.Response;
 
 public class WeatherRepositoryImpl implements WeatherRepository {
     private final ApiService apiService;
+    private final WeatherDao weatherDao;
+    private final Executor executor; // ← ADD THIS
+
     private final MutableLiveData<Resource<WeatherResponse>> weatherLiveData;
     private final List<Call<WeatherResponse>> activeCalls;
 
 
     @Inject
-    public WeatherRepositoryImpl(ApiService apiService) {
+    public WeatherRepositoryImpl(ApiService apiService, WeatherDao weatherDao) {
         this.apiService = apiService;
+        this.weatherDao = weatherDao;
+        this.executor = Executors.newFixedThreadPool(2);
         this.weatherLiveData = new MutableLiveData<>();
         this.activeCalls = new ArrayList<>();
     }
@@ -68,7 +77,40 @@ public class WeatherRepositoryImpl implements WeatherRepository {
         });
         return weatherLiveData;
     }
-     public void cancelAllRequests() {
+
+    @Override
+    public LiveData<List<WeatherResponse>> getLast7DaysWeather() {
+        MutableLiveData<List<WeatherResponse>> result = new MutableLiveData<>();
+
+        executor.execute(() -> {
+            try {
+                // Get last 7 days
+                long sevenDaysAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L);
+                List<WeatherEntity> entities = weatherDao.getWeatherDataSince(sevenDaysAgo);
+
+                // Convert to WeatherResponse list
+                List<WeatherResponse> weatherList = new ArrayList<>();
+                for (WeatherEntity entity : entities) {
+                    weatherList.add(entity.toWeatherResponse());
+                }
+
+                result.postValue(weatherList);
+
+            } catch (Exception e) {
+                result.postValue(new ArrayList<>());
+            }
+        });
+
+        return result;
+
+    }
+
+    @Override
+    public WeatherResponse getCurrentWeatherSync(double latitude, double longitude) throws Exception {
+        return null;
+    }
+
+    public void cancelAllRequests() {
         for (Call<WeatherResponse> call : activeCalls) {
             if (!call.isCanceled()) {
                 call.cancel();
