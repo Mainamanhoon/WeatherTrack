@@ -7,11 +7,11 @@ import retrofit2.http.GET;
 import retrofit2.http.Query;
 
 public interface ApiService {
-    @GET("data/3.0/onecall/timemachine")
-    Call<WeatherResponse> getWeatherDetails(
-            @Query("lat")double lat,
-            @Query("lon")double lon,
-            @Query("dt")long timestamp,
-            @Query("key")String key
+    @GET("weather")
+    Call<WeatherResponse> getCurrentWeather(
+            @Query("lat") double lat,
+            @Query("lon") double lon,
+            @Query("appid") String apiKey,
+            @Query("units") String units
     );
 }
