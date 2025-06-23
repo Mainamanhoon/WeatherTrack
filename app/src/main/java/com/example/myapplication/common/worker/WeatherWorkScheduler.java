@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 public class WeatherWorkScheduler {
 
     private static final String WEATHER_SYNC_WORK_NAME = "weather_sync_work";
-    private static final String TAG = "WeatherWorkScheduler";
+    private static final String TAG = "WeatherSyncWorker";
 
     public static void scheduleWeatherSync(Context context) {
         scheduleWeatherSync(context, 40.7128, -74.0060); // Default NYC coordinates
@@ -35,12 +35,12 @@ public class WeatherWorkScheduler {
         // Create periodic work request - every 6 hours
         PeriodicWorkRequest weatherSyncRequest = new PeriodicWorkRequest.Builder(
                 WeatherSyncWorker.class,
-                6, TimeUnit.HOURS,
-                15, TimeUnit.MINUTES // Flex interval
+                1, TimeUnit.MINUTES,
+                1, TimeUnit.MINUTES // Flex interval
         )
                 .setConstraints(constraints)
                 .setInputData(inputData)
-                .addTag("weather_sync")
+                .addTag(TAG)
                 .build();
 
         // Schedule the work

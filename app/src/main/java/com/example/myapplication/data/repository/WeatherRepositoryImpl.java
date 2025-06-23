@@ -45,22 +45,22 @@ public class WeatherRepositoryImpl implements WeatherRepository {
 
     @Override
     public LiveData<Resource<WeatherResponse>> getCurrentWeatherByCoordinates(double latitude, double longitude) {
-        if(!isValidCoordinate(latitude,longitude)){
-            weatherLiveData.setValue(Resource.error("Invalid Coordinates",null));
+        if (!isValidCoordinate(latitude, longitude)) {
+            weatherLiveData.setValue(Resource.error("Invalid Coordinates", null));
         }
         weatherLiveData.setValue(Resource.loading());
-        Call<WeatherResponse> call = apiService.getCurrentWeather(latitude,longitude,API_KEY,UNITS_METRIC);
+        Call<WeatherResponse> call = apiService.getCurrentWeather(latitude, longitude, API_KEY, UNITS_METRIC);
 
         activeCalls.add(call);
         call.enqueue(new Callback<WeatherResponse>() {
             @Override
             public void onResponse(Call<WeatherResponse> call, Response<WeatherResponse> response) {
                 activeCalls.remove(call);
-                if(response.isSuccessful() && response.body()!=null){
+                if (response.isSuccessful() && response.body() != null) {
                     weatherLiveData.setValue(Resource.success(response.body()));
-                } else{
+                } else {
                     String errorMessage = getErrorMessage(response.code());
-                    weatherLiveData.setValue((Resource.error(errorMessage,null)));
+                    weatherLiveData.setValue((Resource.error(errorMessage, null)));
                 }
             }
 
@@ -68,9 +68,9 @@ public class WeatherRepositoryImpl implements WeatherRepository {
             public void onFailure(Call<WeatherResponse> call, Throwable t) {
                 activeCalls.remove(call);
 
-                if(!call.isCanceled()){
+                if (!call.isCanceled()) {
                     String errorMessage = getErrorMessage(t.hashCode());
-                    weatherLiveData.setValue(Resource.error(errorMessage,null));
+                    weatherLiveData.setValue(Resource.error(errorMessage, null));
                 }
 
             }
@@ -126,15 +126,44 @@ public class WeatherRepositoryImpl implements WeatherRepository {
 
     private String getErrorMessage(int statusCode) {
         switch (statusCode) {
+            case 400:
+                return "Invalid request parameters";
             case 401:
-                return "Invalid API key";
+                return "API key is invalid or expired";
+            case 403:
+                return "Access denied to weather service";
             case 404:
                 return "Location not found";
+            case 429:
+                return "Too many requests. Please wait and try again";
             case 500:
-                return "Server error";
+                return "Weather service is temporarily unavailable";
+            case 502:
+            case 503:
+            case 504:
+                return "Weather service is down for maintenance";
             default:
-                return "Unknown error occurred";
+                if (statusCode >= 400 && statusCode < 500) {
+                    return "Client error occurred";
+                } else if (statusCode >= 500) {
+                    return "Server error occurred";
+                } else {
+                    return "Network error occurred";
+                }
         }
     }
 
+    private String getNetworkErrorMessage(Throwable t) {
+        if (t instanceof java.net.UnknownHostException) {
+            return "No internet connection available";
+        } else if (t instanceof java.net.SocketTimeoutException) {
+            return "Connection timed out. Please try again";
+        } else if (t instanceof java.net.ConnectException) {
+            return "Unable to connect to weather service";
+        } else if (t instanceof java.io.IOException) {
+            return "Network error occurred";
+        } else {
+            return "An unexpected error occurred";
+        }
+    }
 }

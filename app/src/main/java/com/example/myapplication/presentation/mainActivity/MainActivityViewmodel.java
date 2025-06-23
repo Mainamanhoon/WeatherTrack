@@ -9,6 +9,8 @@ import com.example.myapplication.data.local.WeatherDao;
 import com.example.myapplication.data.model.WeatherResponse;
 import com.example.myapplication.domain.WeatherRepository;
 
+import java.util.List;
+
 import javax.inject.Inject;
 
 import dagger.hilt.android.lifecycle.HiltViewModel;
@@ -21,7 +23,7 @@ public class MainActivityViewmodel extends ViewModel {
     private final MediatorLiveData<Resource<WeatherResponse>> currentWeatherData;
     private final MediatorLiveData<Boolean> isLoading;
 
-     private double currentLatitude = 0.0;
+    private double currentLatitude = 0.0;
     private double currentLongitude = 0.0;
     private boolean hasValidLocation = false;
 
@@ -33,7 +35,7 @@ public class MainActivityViewmodel extends ViewModel {
         this.currentWeatherData = new MediatorLiveData<>();
         this.isLoading = new MediatorLiveData<>();
 
-         isLoading.setValue(false);
+        isLoading.setValue(false);
     }
 
     public void getCurrentWeatherByCoordinates(double latitude, double longitude) {
@@ -50,12 +52,12 @@ public class MainActivityViewmodel extends ViewModel {
         // Get data from repository
         LiveData<Resource<WeatherResponse>> source = weatherRepository.getCurrentWeatherByCoordinates(latitude, longitude);
 
-         currentWeatherData.removeSource(source);
+        currentWeatherData.removeSource(source);
 
-         currentWeatherData.addSource(source, resource -> {
+        currentWeatherData.addSource(source, resource -> {
             currentWeatherData.setValue(resource);
 
-             if (resource != null) {
+            if (resource != null) {
                 isLoading.setValue(resource.getStatus() == Resource.Status.LOADING);
             }
         });
@@ -69,15 +71,19 @@ public class MainActivityViewmodel extends ViewModel {
         }
     }
 
-     public LiveData<Resource<WeatherResponse>> getCurrentWeatherData() {
+    public LiveData<Resource<WeatherResponse>> getCurrentWeatherData() {
         return currentWeatherData;
+    }
+
+    public LiveData<List<WeatherResponse>> getLast7DaysWeather() {
+        return weatherRepository.getLast7DaysWeather();
     }
 
     public LiveData<Boolean> getLoadingState() {
         return isLoading;
     }
 
-     public boolean isCurrentWeatherAvailable() {
+    public boolean isCurrentWeatherAvailable() {
         Resource<WeatherResponse> data = currentWeatherData.getValue();
         return data != null && data.isSuccess() && data.getData() != null;
     }
@@ -102,6 +108,28 @@ public class MainActivityViewmodel extends ViewModel {
         return "Unknown";
     }
 
+    public String getCurrentWeatherDescription() {
+        if (isCurrentWeatherAvailable()) {
+            WeatherResponse weather = currentWeatherData.getValue().getData();
+            if (weather != null && weather.weather != null && !weather.weather.isEmpty()) {
+                return weather.weather.get(0).description;
+            }
+        }
+        return "Unknown";
+    }
+
+    public double getCurrentLatitude() {
+        return currentLatitude;
+    }
+
+    public double getCurrentLongitude() {
+        return currentLongitude;
+    }
+
+    public boolean hasLocation() {
+        return hasValidLocation;
+    }
+
     private boolean isValidCoordinate(double latitude, double longitude) {
         return latitude >= -90.0 && latitude <= 90.0 && longitude >= -180.0 && longitude <= 180.0;
     }
@@ -109,6 +137,6 @@ public class MainActivityViewmodel extends ViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
-//        weatherRepository.cancelAllRequests();
+        // Clean up any resources if needed
     }
 }
