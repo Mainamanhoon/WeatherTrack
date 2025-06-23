@@ -333,42 +333,7 @@ PeriodicWorkRequest weatherSyncRequest = new PeriodicWorkRequest.Builder(
 3. Sync Gradle files
 4. Run on device or emulator
 
-### Dependencies Used
-```gradle
-// Core Android
-implementation 'androidx.appcompat:appcompat:1.7.1'
-implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
-implementation 'com.google.android.material:material:1.12.0'
-
-// Architecture Components
-implementation 'androidx.lifecycle:lifecycle-viewmodel:2.8.7'
-implementation 'androidx.lifecycle:lifecycle-livedata:2.8.7'
-
-// Room Database
-implementation 'androidx.room:room-runtime:2.7.2'
-annotationProcessor 'androidx.room:room-compiler:2.7.2'
-
-// Retrofit & Networking
-implementation 'com.squareup.retrofit2:retrofit:2.9.0'
-implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
-implementation 'com.squareup.okhttp3:logging-interceptor:4.9.0'
-
-// Dependency Injection
-implementation 'com.google.dagger:hilt-android:2.56.2'
-annotationProcessor 'com.google.dagger:hilt-android-compiler:2.56.2'
-
-// WorkManager
-implementation 'androidx.work:work-runtime:2.10.2'
-implementation 'androidx.hilt:hilt-work:1.2.0'
-
-// Location Services
-implementation 'com.google.android.gms:play-services-location:21.3.0'
-
-// UI Components
-implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
-```
-
-## 📱 How to Use
+ ## 📱 How to Use
 
 ### First Launch
 1. **Grant Permissions**: Allow location access for accurate weather data
