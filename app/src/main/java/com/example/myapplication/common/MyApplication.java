@@ -23,8 +23,6 @@ public class MyApplication extends Application implements Configuration.Provider
 
         WeatherWorkScheduler.scheduleWeatherSync(this);
 
-
-
     }
 
     @NonNull

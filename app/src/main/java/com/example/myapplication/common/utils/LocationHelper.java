@@ -39,22 +39,17 @@ public class LocationHelper {
         fusedLocationClient.getLastLocation()
                 .addOnSuccessListener(location -> {
                     if (location != null) {
-                        Log.d(TAG, "Location received: " + location.getLatitude() + ", " + location.getLongitude());
-                        callback.onLocationReceived(location.getLatitude(), location.getLongitude());
+                         callback.onLocationReceived(location.getLatitude(), location.getLongitude());
                     } else {
-                        Log.w(TAG, "Location is null, requesting fresh location");
-                        requestFreshLocation(callback);
+                         requestFreshLocation(callback);
                     }
                 })
                 .addOnFailureListener(e -> {
-                    Log.e(TAG, "Failed to get location", e);
-                    callback.onError("Failed to get location: " + e.getMessage());
+                     callback.onError("Failed to get location: " + e.getMessage());
                 });
     }
 
     private void requestFreshLocation(LocationCallback callback) {
-        // Implementation for requesting fresh location if needed
-        // For now, return error
         callback.onError("Unable to get current location");
     }
 

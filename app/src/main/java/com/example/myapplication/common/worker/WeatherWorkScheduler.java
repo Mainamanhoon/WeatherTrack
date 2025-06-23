@@ -6,73 +6,156 @@ import android.util.Log;
 import androidx.work.Constraints;
 import androidx.work.Data;
 import androidx.work.ExistingPeriodicWorkPolicy;
-import androidx.work.ExistingWorkPolicy;
 import androidx.work.NetworkType;
-import androidx.work.OneTimeWorkRequest;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
-import androidx.work.WorkRequest;
+
+import com.example.myapplication.common.Constants;
+import com.example.myapplication.common.utils.LocationPreferences;
 
 import java.util.concurrent.TimeUnit;
 
 public class WeatherWorkScheduler {
 
     private static final String WEATHER_SYNC_WORK_NAME = "weather_sync_work";
-    private static final String TAG = "WeatherSyncWorker";
+    private static final String TAG = "WeatherWorkScheduler";
 
     public static void scheduleWeatherSync(Context context) {
-        scheduleWeatherSync(context, 40.7128, -74.0060);
+         double[] userLocation = LocationPreferences.getLastKnownLocation(context);
+
+        if (userLocation != null) {
+             scheduleWeatherSync(context, userLocation[0], userLocation[1]);
+        } else {
+             scheduleWeatherSync(context, Constants.DEFAULT_LATITUDE, Constants.DEFAULT_LONGITUDE);
+        }
     }
+
     public static void scheduleWeatherSync(Context context, double latitude, double longitude) {
+
         Constraints constraints = new Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
+                .setRequiresBatteryNotLow(true)
                 .build();
 
-         Data inputData = new Data.Builder()
+        Data inputData = new Data.Builder()
                 .putDouble("latitude", latitude)
                 .putDouble("longitude", longitude)
                 .build();
 
-        // Create periodic work request - every 6 hours
         PeriodicWorkRequest weatherSyncRequest = new PeriodicWorkRequest.Builder(
                 WeatherSyncWorker.class,
-                1, TimeUnit.MINUTES,
-                1, TimeUnit.MINUTES // Flex interval
+                6, TimeUnit.HOURS,
+                1, TimeUnit.HOURS
         )
                 .setConstraints(constraints)
                 .setInputData(inputData)
                 .addTag(TAG)
+                .addTag("weather_sync_periodic")
                 .build();
 
-         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WEATHER_SYNC_WORK_NAME,
-                ExistingPeriodicWorkPolicy.REPLACE,
+                ExistingPeriodicWorkPolicy.KEEP,
                 weatherSyncRequest
         );
-//        OneTimeWorkRequest weatherSyncRequest = new OneTimeWorkRequest.Builder(WeatherSyncWorker.class)
-//                .setConstraints(constraints)
-//                .setInputData(inputData)
-//                .addTag("weather_sync")
-//                .addTag("one_time")
-//                .build();
-//
-//        WorkManager.getInstance(context).enqueueUniqueWork(
-//                WEATHER_SYNC_WORK_NAME,
-//                ExistingWorkPolicy.REPLACE,
-//                weatherSyncRequest
-//        );
+     }
 
-        Log.d(TAG, "Weather sync scheduled for coordinates: " + latitude + ", " + longitude);
+    public static void updateWeatherSyncLocation(Context context, double latitude, double longitude) {
+
+         LocationPreferences.saveLastKnownLocation(context, latitude, longitude);
+         cancelWeatherSync(context);
+
+         try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        scheduleWeatherSync(context, latitude, longitude);
     }
 
     public static void cancelWeatherSync(Context context) {
         WorkManager.getInstance(context).cancelUniqueWork(WEATHER_SYNC_WORK_NAME);
-        android.util.Log.d(TAG, "Weather sync cancelled");
+     }
+
+    /**
+     * Call this method when the user grants location permission for the first time
+     * or when the app gets a fresh location update
+     */
+    public static void refreshWeatherSyncWithUserLocation(Context context) {
+        double[] userLocation = LocationPreferences.getLastKnownLocation(context);
+
+        if (userLocation != null) {
+             updateWeatherSyncLocation(context, userLocation[0], userLocation[1]);
+        } else {
+            Log.d(TAG, "No user location available for refresh");
+        }
     }
 
-    public static void updateWeatherSyncLocation(Context context, double latitude, double longitude) {
-        // Cancel existing and schedule with new coordinates
-        cancelWeatherSync(context);
-        scheduleWeatherSync(context, latitude, longitude);
+    /**
+     * Check if the current scheduled work is using stale location
+     */
+    public static boolean isUsingStaleLocation(Context context) {
+        double[] currentLocation = LocationPreferences.getLastKnownLocation(context);
+        if (currentLocation == null) {
+            return false;
+        }
+
+         long locationAge = LocationPreferences.getLocationAge(context);
+        return locationAge > (24 * 60 * 60 * 1000L); // 1 day in milliseconds
+    }
+
+    /**
+     * Force an immediate weather sync (useful for testing or manual refresh)
+     */
+    public static void triggerImmediateSync(Context context) {
+
+        double[] userLocation = LocationPreferences.getLastKnownLocation(context);
+        double latitude = Constants.DEFAULT_LATITUDE;
+        double longitude = Constants.DEFAULT_LONGITUDE;
+
+        if (userLocation != null) {
+            latitude = userLocation[0];
+            longitude = userLocation[1];
+        }
+
+        Constraints constraints = new Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build();
+
+        Data inputData = new Data.Builder()
+                .putDouble("latitude", latitude)
+                .putDouble("longitude", longitude)
+                .build();
+
+        androidx.work.OneTimeWorkRequest immediateSync =
+                new androidx.work.OneTimeWorkRequest.Builder(WeatherSyncWorker.class)
+                        .setConstraints(constraints)
+                        .setInputData(inputData)
+                        .addTag("immediate_sync")
+                        .build();
+
+        WorkManager.getInstance(context).enqueue(immediateSync);
+     }
+
+    /**
+     * Get the status of the periodic work
+     */
+    public static void checkWorkStatus(Context context) {
+        WorkManager.getInstance(context)
+                .getWorkInfosForUniqueWork(WEATHER_SYNC_WORK_NAME)
+                .addListener(() -> {
+                    try {
+                        androidx.lifecycle.LiveData<java.util.List<androidx.work.WorkInfo>> workInfos =
+                                (androidx.lifecycle.LiveData<java.util.List<androidx.work.WorkInfo>>) WorkManager.getInstance(context).getWorkInfosForUniqueWork(WEATHER_SYNC_WORK_NAME);
+
+                        if (workInfos.getValue() != null && !workInfos.getValue().isEmpty()) {
+                            androidx.work.WorkInfo workInfo = workInfos.getValue().get(0);
+                         } else {
+                            Log.d(TAG, "No weather sync work found");
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error checking work status", e);
+                    }
+                }, Runnable::run);
     }
 }

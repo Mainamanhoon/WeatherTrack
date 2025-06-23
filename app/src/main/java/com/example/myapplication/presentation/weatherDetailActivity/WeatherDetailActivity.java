@@ -60,11 +60,9 @@ public class WeatherDetailActivity extends AppCompatActivity {
             return;
         }
 
-        // Set basic info
-        binding.tvCityName.setText(weatherData.name != null ? weatherData.name : "Unknown Location");
+         binding.tvCityName.setText(weatherData.name != null ? weatherData.name : "Unknown Location");
 
-        // Format date from timestamp
-        if (weatherData.dt > 0) {
+         if (weatherData.dt > 0) {
             SimpleDateFormat dateFormat = new SimpleDateFormat("EEEE, MMMM dd, yyyy", Locale.getDefault());
             SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
             Date date = new Date(weatherData.dt * 1000L);
@@ -73,8 +71,7 @@ public class WeatherDetailActivity extends AppCompatActivity {
             binding.tvTime.setText("Last updated: " + timeFormat.format(date));
         }
 
-        // Main weather info
-        if (weatherData.main != null) {
+         if (weatherData.main != null) {
             binding.tvTemperature.setText(String.format("%.0f°C", weatherData.main.temp));
             binding.tvFeelsLike.setText(String.format("Feels like %.0f°C", weatherData.main.feels_like));
             binding.tvHumidity.setText(weatherData.main.humidity + "%");
@@ -86,31 +83,26 @@ public class WeatherDetailActivity extends AppCompatActivity {
             }
         }
 
-        // Weather description
-        if (weatherData.weather != null && !weatherData.weather.isEmpty()) {
+         if (weatherData.weather != null && !weatherData.weather.isEmpty()) {
             binding.tvWeatherDescription.setText(weatherData.weather.get(0).description);
             binding.tvWeatherMain.setText(weatherData.weather.get(0).main);
             setWeatherIcon(weatherData.weather.get(0).main);
         }
 
-        // Wind info
-        if (weatherData.wind != null) {
+         if (weatherData.wind != null) {
             binding.tvWindSpeed.setText(String.format("%.1f km/h", weatherData.wind.speed * 3.6));
             binding.tvWindDirection.setText(getWindDirection(weatherData.wind.deg));
         }
 
-        // Cloud info
-        if (weatherData.clouds != null) {
+         if (weatherData.clouds != null) {
             binding.tvCloudiness.setText(weatherData.clouds.all + "%");
         }
 
-        // Visibility
-        if (weatherData.visibility > 0) {
+         if (weatherData.visibility > 0) {
             binding.tvVisibility.setText(String.format("%.1f km", weatherData.visibility / 1000.0));
         }
 
-        // Sunrise/Sunset
-        if (weatherData.sys != null) {
+         if (weatherData.sys != null) {
             if (weatherData.sys.sunrise > 0) {
                 SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
                 binding.tvSunrise.setText(timeFormat.format(new Date(weatherData.sys.sunrise * 1000L)));
@@ -125,8 +117,7 @@ public class WeatherDetailActivity extends AppCompatActivity {
             }
         }
 
-        // Coordinates
-        if (weatherData.coord != null) {
+         if (weatherData.coord != null) {
             binding.tvCoordinates.setText(String.format("Lat: %.4f, Lon: %.4f",
                     weatherData.coord.lat, weatherData.coord.lon));
         }

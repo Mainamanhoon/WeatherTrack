@@ -3,6 +3,7 @@ package com.example.myapplication.presentation.mainActivity;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
 
@@ -18,6 +19,7 @@ import com.example.myapplication.R;
 import com.example.myapplication.common.Constants;
 import com.example.myapplication.common.Resource;
 import com.example.myapplication.common.utils.LocationHelper;
+import com.example.myapplication.common.utils.LocationPreferences;
 import com.example.myapplication.common.worker.WeatherWorkScheduler;
 import com.example.myapplication.data.model.WeatherResponse;
 import com.example.myapplication.databinding.ActivityMainBinding;
@@ -43,10 +45,18 @@ public class MainActivity extends AppCompatActivity {
                         boolean coarseLocationGranted = Boolean.TRUE.equals(result.get(Manifest.permission.ACCESS_COARSE_LOCATION));
 
                         if (fineLocationGranted || coarseLocationGranted) {
+                            Toast.makeText(this, "Location permission granted. Getting your location...", Toast.LENGTH_SHORT).show();
                             getCurrentLocationAndFetchWeather();
                         } else {
-                            showError("Location permission is required to get weather data");
-                            loadWeatherWithDefaultLocation();
+                            // Check for saved location before falling back to default
+                            double[] savedLocation = LocationPreferences.getLastKnownLocation(this);
+                            if (savedLocation != null) {
+                                showError("Location permission denied. Using your last known location.");
+                                viewModel.getCurrentWeatherByCoordinates(savedLocation[0], savedLocation[1]);
+                            } else {
+                                showError("Location permission denied. Using default location: Bhopal, India");
+                                loadWeatherWithDefaultLocation();
+                            }
                         }
                     });
 
@@ -70,16 +80,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupUI() {
-        // Set current date
-        SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMMM", Locale.getDefault());
+         SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMMM", Locale.getDefault());
         binding.tvDate.setText(dateFormat.format(new Date()));
 
-        // Setup RecyclerView
-        binding.rvForecast.setLayoutManager(new LinearLayoutManager(this));
+         binding.rvForecast.setLayoutManager(new LinearLayoutManager(this));
         binding.rvForecast.setAdapter(forecastAdapter);
 
-        // Setup SwipeRefreshLayout and other UI elements
-        setupSwipeRefresh();
+         setupSwipeRefresh();
     }
 
     private void setupSwipeRefresh() {
@@ -93,11 +100,9 @@ public class MainActivity extends AppCompatActivity {
                 R.color.white
         );
 
-        // Setup FAB click listener
-        binding.fabRefresh.setOnClickListener(v -> refreshWeatherData());
+         binding.fabRefresh.setOnClickListener(v -> refreshWeatherData());
 
-        // Setup retry button click listener
-        binding.btnRetry.setOnClickListener(v -> {
+         binding.btnRetry.setOnClickListener(v -> {
             hideError();
             checkLocationPermissionAndFetchWeather();
         });
@@ -123,8 +128,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Observe forecast data
-        viewModel.getLast7DaysWeather().observe(this, weatherList -> {
+         viewModel.getLast7DaysWeather().observe(this, weatherList -> {
             if (weatherList != null && !weatherList.isEmpty()) {
                 forecastAdapter.updateWeatherList(weatherList);
                 binding.rvForecast.setVisibility(View.VISIBLE);
@@ -135,8 +139,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Observe loading state
-        viewModel.getLoadingState().observe(this, isLoading -> {
+         viewModel.getLoadingState().observe(this, isLoading -> {
             showLoading(isLoading != null && isLoading);
         });
     }
@@ -164,18 +167,39 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void getCurrentLocationAndFetchWeather() {
+        showLoading(true);
+
         locationHelper.getCurrentLocation(new LocationHelper.LocationCallback() {
             @Override
             public void onLocationReceived(double latitude, double longitude) {
-                viewModel.getCurrentWeatherByCoordinates(latitude, longitude);
-                // Update WorkManager with current location
-                WeatherWorkScheduler.updateWeatherSyncLocation(MainActivity.this, latitude, longitude);
+                Log.d("MainActivity", "Location received: " + latitude + ", " + longitude);
+
+                 viewModel.getCurrentWeatherByCoordinates(latitude, longitude);
+
+                 WeatherWorkScheduler.updateWeatherSyncLocation(MainActivity.this, latitude, longitude);
+
+                 Toast.makeText(MainActivity.this,
+                        "Using your current location", Toast.LENGTH_SHORT).show();
             }
 
             @Override
             public void onError(String error) {
-                showError("Failed to get location: " + error);
-                loadWeatherWithDefaultLocation();
+                Log.e("MainActivity", "Location error: " + error);
+
+                 double[] savedLocation = LocationPreferences.getLastKnownLocation(MainActivity.this);
+                if (savedLocation != null) {
+                    Log.d("MainActivity", "Using saved location: " + savedLocation[0] + ", " + savedLocation[1]);
+                    viewModel.getCurrentWeatherByCoordinates(savedLocation[0], savedLocation[1]);
+
+                    Toast.makeText(MainActivity.this,
+                            "Using your last known location", Toast.LENGTH_SHORT).show();
+                } else {
+                    // Fall back to default location only if no saved location exists
+                    showError("Unable to get your location. Using default location: Bhopal, India");
+                    loadWeatherWithDefaultLocation();
+                }
+
+                showLoading(false);
             }
         });
     }
@@ -191,34 +215,38 @@ public class MainActivity extends AppCompatActivity {
         if (hasLocationPermissions()) {
             getCurrentLocationAndFetchWeather();
         } else {
-            viewModel.refreshWeather();
+            // Check if we have saved location
+            double[] savedLocation = LocationPreferences.getLastKnownLocation(this);
+            if (savedLocation != null) {
+                viewModel.getCurrentWeatherByCoordinates(savedLocation[0], savedLocation[1]);
+                Toast.makeText(this, "Using saved location", Toast.LENGTH_SHORT).show();
+            } else {
+                // Request permissions or use default
+                showError("Location permission required for accurate weather data");
+                loadWeatherWithDefaultLocation();
+            }
         }
     }
 
     private void updateWeatherUI(WeatherResponse weather) {
         if (weather == null) return;
 
-        // Show content and hide error
-        hideError();
+         hideError();
 
-        // Update main temperature section
-        if (weather.main != null) {
+         if (weather.main != null) {
             binding.tvTemperature.setText(String.format("%.0f°C", weather.main.temp));
             binding.tvFeelsLike.setText(String.format("Feels like %.0f°C", weather.main.feels_like));
             binding.tvHighLow.setText(String.format("H:%.0f°  L:%.0f°",
                     weather.main.temp_max, weather.main.temp_min));
 
-            // Individual min/max temperatures
-            binding.tvMinTemp.setText(String.format("%.0f°C", weather.main.temp_min));
+             binding.tvMinTemp.setText(String.format("%.0f°C", weather.main.temp_min));
             binding.tvMaxTemp.setText(String.format("%.0f°C", weather.main.temp_max));
 
-            // Humidity and Pressure
-            binding.tvHumidity.setText(weather.main.humidity + "%");
+             binding.tvHumidity.setText(weather.main.humidity + "%");
             binding.tvPressure.setText(weather.main.pressure + " hPa");
         }
 
-        // Update weather description
-        if (weather.weather != null && !weather.weather.isEmpty()) {
+         if (weather.weather != null && !weather.weather.isEmpty()) {
             String description = weather.weather.get(0).description;
             // Capitalize first letter
             if (description != null && !description.isEmpty()) {
@@ -228,26 +256,22 @@ public class MainActivity extends AppCompatActivity {
             setWeatherIcon(weather.weather.get(0).main);
         }
 
-        // Update wind information
-        if (weather.wind != null) {
+         if (weather.wind != null) {
             binding.tvWindSpeed.setText(String.format("%.1f km/h", weather.wind.speed * 3.6)); // Convert m/s to km/h
             binding.tvWindDirection.setText(getWindDirection(weather.wind.deg));
         }
 
-        // Update cloudiness (using clouds as rain percentage approximation)
-        if (weather.clouds != null) {
+         if (weather.clouds != null) {
             binding.tvRainPercentage.setText(weather.clouds.all + "%");
         }
 
-        // Update visibility
-        if (weather.visibility > 0) {
+         if (weather.visibility > 0) {
             binding.tvVisibility.setText(String.format("%.1f km", weather.visibility / 1000.0));
         } else {
             binding.tvVisibility.setText("N/A");
         }
 
-        // Update timezone
-        if (weather.timezone != 0) {
+         if (weather.timezone != 0) {
             int timezoneHours = weather.timezone / 3600;
             String timezoneStr = (timezoneHours >= 0 ? "UTC+" : "UTC") + timezoneHours;
             binding.tvTimezone.setText(timezoneStr);
@@ -255,8 +279,7 @@ public class MainActivity extends AppCompatActivity {
             binding.tvTimezone.setText("UTC");
         }
 
-        // Update sunrise and sunset
-        if (weather.sys != null) {
+         if (weather.sys != null) {
             SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
 
             if (weather.sys.sunrise > 0) {
@@ -272,30 +295,30 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Update city name in date text
-        if (weather.name != null && !weather.name.isEmpty()) {
+         if (weather.name != null && !weather.name.isEmpty()) {
             SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMMM", Locale.getDefault());
             binding.tvDate.setText(dateFormat.format(new Date()) + " • " + weather.name);
         }
     }
 
     private void setWeatherIcon(String weatherMain) {
-        int iconRes = R.drawable.cloudy_sunny; // default
+        int iconRes = R.drawable.cloudy_sunny;
 
         if (weatherMain != null) {
             switch (weatherMain.toLowerCase()) {
                 case "clear":
-                    iconRes = R.drawable.cloudy_sunny; // You might want to add a sunny icon
+                    iconRes = R.drawable.sun;
                     break;
                 case "clouds":
-                    iconRes = R.drawable.cloudy_sunny;
+                    iconRes = R.drawable.cloudy_3;
                     break;
                 case "rain":
+                    iconRes = R.drawable.rainy;
+                    break;
                 case "drizzle":
                     iconRes = R.drawable.umbrella;
                     break;
-                // Add more weather conditions as needed
-                default:
+                 default:
                     iconRes = R.drawable.cloudy_sunny;
                     break;
             }

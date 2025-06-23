@@ -11,7 +11,7 @@ import com.example.myapplication.data.local.WeatherDao;
 import com.example.myapplication.data.local.WeatherEntity;
 import com.example.myapplication.data.model.WeatherResponse;
 import com.example.myapplication.data.network.ApiService;
-import com.example.myapplication.domain.WeatherRepository;
+import com.example.myapplication.domain.repository.WeatherRepository;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,11 +27,10 @@ import retrofit2.Response;
 public class WeatherRepositoryImpl implements WeatherRepository {
     private final ApiService apiService;
     private final WeatherDao weatherDao;
-    private final Executor executor; // ← ADD THIS
+    private final Executor executor;
 
     private final MutableLiveData<Resource<WeatherResponse>> weatherLiveData;
     private final List<Call<WeatherResponse>> activeCalls;
-
 
     @Inject
     public WeatherRepositoryImpl(ApiService apiService, WeatherDao weatherDao) {
@@ -42,12 +41,13 @@ public class WeatherRepositoryImpl implements WeatherRepository {
         this.activeCalls = new ArrayList<>();
     }
 
-
     @Override
     public LiveData<Resource<WeatherResponse>> getCurrentWeatherByCoordinates(double latitude, double longitude) {
         if (!isValidCoordinate(latitude, longitude)) {
             weatherLiveData.setValue(Resource.error("Invalid Coordinates", null));
+            return weatherLiveData;
         }
+
         weatherLiveData.setValue(Resource.loading());
         Call<WeatherResponse> call = apiService.getCurrentWeather(latitude, longitude, API_KEY, UNITS_METRIC);
 
@@ -57,22 +57,31 @@ public class WeatherRepositoryImpl implements WeatherRepository {
             public void onResponse(Call<WeatherResponse> call, Response<WeatherResponse> response) {
                 activeCalls.remove(call);
                 if (response.isSuccessful() && response.body() != null) {
-                    weatherLiveData.setValue(Resource.success(response.body()));
+                    WeatherResponse weatherResponse = response.body();
+
+                     executor.execute(() -> {
+                        try {
+                            WeatherEntity entity = new WeatherEntity(weatherResponse);
+                            weatherDao.insertWeatherData(entity);
+                        } catch (Exception e) {
+                            android.util.Log.e("WeatherRepo", "Error saving weather data", e);
+                        }
+                    });
+
+                    weatherLiveData.setValue(Resource.success(weatherResponse));
                 } else {
                     String errorMessage = getErrorMessage(response.code());
-                    weatherLiveData.setValue((Resource.error(errorMessage, null)));
+                    weatherLiveData.setValue(Resource.error(errorMessage, null));
                 }
             }
 
             @Override
             public void onFailure(Call<WeatherResponse> call, Throwable t) {
                 activeCalls.remove(call);
-
                 if (!call.isCanceled()) {
-                    String errorMessage = getErrorMessage(t.hashCode());
+                    String errorMessage = getNetworkErrorMessage(t);
                     weatherLiveData.setValue(Resource.error(errorMessage, null));
                 }
-
             }
         });
         return weatherLiveData;
@@ -84,30 +93,39 @@ public class WeatherRepositoryImpl implements WeatherRepository {
 
         executor.execute(() -> {
             try {
-                // Get last 7 days
-                long sevenDaysAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L);
-                List<WeatherEntity> entities = weatherDao.getWeatherDataSince(sevenDaysAgo);
+                 long sevenDaysAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L);
 
-                // Convert to WeatherResponse list
-                List<WeatherResponse> weatherList = new ArrayList<>();
+                 List<WeatherEntity> entities = weatherDao.getLast7DaysLatestWeatherPerDay(sevenDaysAgo);
+
+                 List<WeatherResponse> weatherList = new ArrayList<>();
                 for (WeatherEntity entity : entities) {
                     weatherList.add(entity.toWeatherResponse());
                 }
 
-                result.postValue(weatherList);
+                 result.postValue(weatherList);
 
             } catch (Exception e) {
-                result.postValue(new ArrayList<>());
+                 result.postValue(new ArrayList<>());
             }
         });
 
         return result;
-
     }
 
     @Override
     public WeatherResponse getCurrentWeatherSync(double latitude, double longitude) throws Exception {
         return null;
+    }
+
+     public void cleanOldWeatherData() {
+        executor.execute(() -> {
+            try {
+                long thirtyDaysAgo = System.currentTimeMillis() - (30 * 24 * 60 * 60 * 1000L);
+                weatherDao.cleanOldWeatherData(thirtyDaysAgo);
+             } catch (Exception e) {
+                android.util.Log.e("WeatherRepo", "Error cleaning old data", e);
+            }
+        });
     }
 
     public void cancelAllRequests() {
@@ -122,7 +140,6 @@ public class WeatherRepositoryImpl implements WeatherRepository {
     private boolean isValidCoordinate(double latitude, double longitude) {
         return latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
     }
-
 
     private String getErrorMessage(int statusCode) {
         switch (statusCode) {

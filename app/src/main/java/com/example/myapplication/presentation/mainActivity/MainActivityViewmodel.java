@@ -7,7 +7,8 @@ import androidx.lifecycle.ViewModel;
 import com.example.myapplication.common.Resource;
 import com.example.myapplication.data.local.WeatherDao;
 import com.example.myapplication.data.model.WeatherResponse;
-import com.example.myapplication.domain.WeatherRepository;
+import com.example.myapplication.data.repository.WeatherRepositoryImpl;
+import com.example.myapplication.domain.repository.WeatherRepository;
 
 import java.util.List;
 
@@ -19,6 +20,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel;
 public class MainActivityViewmodel extends ViewModel {
 
     private final WeatherRepository weatherRepository;
+    private final WeatherRepositoryImpl weatherRepositoryImpl; // For cleanup methods
     private final WeatherDao weatherDao;
     private final MediatorLiveData<Resource<WeatherResponse>> currentWeatherData;
     private final MediatorLiveData<Boolean> isLoading;
@@ -28,14 +30,19 @@ public class MainActivityViewmodel extends ViewModel {
     private boolean hasValidLocation = false;
 
     @Inject
-    public MainActivityViewmodel(WeatherRepository weatherRepository, WeatherDao weatherDao) {
+    public MainActivityViewmodel(WeatherRepository weatherRepository,
+                                 WeatherRepositoryImpl weatherRepositoryImpl,
+                                 WeatherDao weatherDao) {
         this.weatherRepository = weatherRepository;
+        this.weatherRepositoryImpl = weatherRepositoryImpl;
         this.weatherDao = weatherDao;
 
         this.currentWeatherData = new MediatorLiveData<>();
         this.isLoading = new MediatorLiveData<>();
 
         isLoading.setValue(false);
+
+         cleanOldWeatherData();
     }
 
     public void getCurrentWeatherByCoordinates(double latitude, double longitude) {
@@ -44,13 +51,11 @@ public class MainActivityViewmodel extends ViewModel {
             return;
         }
 
-        // Store location
-        this.currentLatitude = latitude;
+         this.currentLatitude = latitude;
         this.currentLongitude = longitude;
         this.hasValidLocation = true;
 
-        // Get data from repository
-        LiveData<Resource<WeatherResponse>> source = weatherRepository.getCurrentWeatherByCoordinates(latitude, longitude);
+         LiveData<Resource<WeatherResponse>> source = weatherRepository.getCurrentWeatherByCoordinates(latitude, longitude);
 
         currentWeatherData.removeSource(source);
 
@@ -130,6 +135,24 @@ public class MainActivityViewmodel extends ViewModel {
         return hasValidLocation;
     }
 
+     private void cleanOldWeatherData() {
+        if (weatherRepositoryImpl != null) {
+            weatherRepositoryImpl.cleanOldWeatherData();
+        }
+    }
+
+     public void debugDailyRecords() {
+         new Thread(() -> {
+            try {
+                long sevenDaysAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L);
+                List<WeatherDao.DayCountResult> counts = weatherDao.getRecordsCountPerDay(sevenDaysAgo);
+
+            } catch (Exception e) {
+                android.util.Log.e("WeatherViewModel", "Error getting debug info", e);
+            }
+        }).start();
+    }
+
     private boolean isValidCoordinate(double latitude, double longitude) {
         return latitude >= -90.0 && latitude <= 90.0 && longitude >= -180.0 && longitude <= 180.0;
     }
@@ -137,6 +160,8 @@ public class MainActivityViewmodel extends ViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
-        // Clean up any resources if needed
+         if (weatherRepositoryImpl != null) {
+            weatherRepositoryImpl.cancelAllRequests();
+        }
     }
 }

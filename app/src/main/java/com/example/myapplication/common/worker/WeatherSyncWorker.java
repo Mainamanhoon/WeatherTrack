@@ -9,10 +9,17 @@ import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
 import com.example.myapplication.common.Constants;
+import com.example.myapplication.common.utils.LocationPreferences;
 import com.example.myapplication.data.local.WeatherDao;
 import com.example.myapplication.data.local.WeatherEntity;
 import com.example.myapplication.data.model.WeatherResponse;
 import com.example.myapplication.data.network.ApiService;
+
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
 
 import dagger.assisted.Assisted;
 import dagger.assisted.AssistedInject;
@@ -42,14 +49,26 @@ public class WeatherSyncWorker extends Worker {
         Log.d(TAG, "WeatherSyncWorker started - fetching weather data");
 
         try {
-            // Get coordinates from input data or use defaults
-            double latitude = getInputData().getDouble("latitude", Constants.DEFAULT_LATITUDE);
-            double longitude = getInputData().getDouble("longitude", Constants.DEFAULT_LONGITUDE);
+             if (shouldSkipTodaysSync()) {
+                 return Result.success();
+            }
 
-            Log.d(TAG, "Fetching weather for coordinates: " + latitude + ", " + longitude);
+             double latitude = getInputData().getDouble("latitude", 0);
+            double longitude = getInputData().getDouble("longitude", 0);
 
-            // Make synchronous API call
-            Response<WeatherResponse> response = apiService.getCurrentWeather(
+             if (!isValidCoordinate(latitude, longitude)) {
+
+                 double[] userLocation = LocationPreferences.getLastKnownLocation(getApplicationContext());
+                if (userLocation != null) {
+                    latitude = userLocation[0];
+                    longitude = userLocation[1];
+                 } else {
+                     latitude = Constants.DEFAULT_LATITUDE;
+                    longitude = Constants.DEFAULT_LONGITUDE;
+                 }
+            }
+
+              Response<WeatherResponse> response = apiService.getCurrentWeather(
                     latitude,
                     longitude,
                     Constants.API_KEY,
@@ -59,21 +78,84 @@ public class WeatherSyncWorker extends Worker {
             if (response.isSuccessful() && response.body() != null) {
                 WeatherResponse weatherData = response.body();
 
-                // Save to database
-                WeatherEntity entity = new WeatherEntity(weatherData);
+                 WeatherEntity entity = new WeatherEntity(weatherData);
                 weatherDao.insertWeatherData(entity);
 
-                Log.d(TAG, "Weather data successfully saved to database");
+                 cleanOldData();
+
+                logDailyRecordsCount();
+
                 return Result.success();
 
             } else {
-                Log.e(TAG, "API call failed with code: " + response.code());
-                return Result.retry();
+
+                if (response.code() >= 500) {
+                    return Result.retry();
+                } else {
+                    return Result.failure();
+                }
             }
 
         } catch (Exception e) {
-            Log.e(TAG, "Error during weather sync", e);
-            return Result.failure();
+
+             if (e instanceof java.net.UnknownHostException ||
+                    e instanceof java.net.SocketTimeoutException ||
+                    e instanceof java.io.IOException) {
+                 return Result.retry();
+            } else {
+                return Result.failure();
+            }
         }
+    }
+
+    private boolean shouldSkipTodaysSync() {
+        try {
+             Calendar today = Calendar.getInstance();
+            today.set(Calendar.HOUR_OF_DAY, 0);
+            today.set(Calendar.MINUTE, 0);
+            today.set(Calendar.SECOND, 0);
+            today.set(Calendar.MILLISECOND, 0);
+
+            long startOfToday = today.getTimeInMillis();
+
+             List<WeatherEntity> todaysRecords = weatherDao.getWeatherDataSince(startOfToday);
+
+            if (!todaysRecords.isEmpty()) {
+                 WeatherEntity latestRecord = todaysRecords.get(todaysRecords.size() - 1);
+                long timeSinceLastUpdate = System.currentTimeMillis() - latestRecord.cachedAt;
+
+                 if (timeSinceLastUpdate < (6 * 60 * 60 * 1000L)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
+             return false;
+        }
+    }
+
+    private void cleanOldData() {
+        try {
+            long thirtyDaysAgo = System.currentTimeMillis() - (30 * 24 * 60 * 60 * 1000L);
+            weatherDao.cleanOldWeatherData(thirtyDaysAgo);
+         } catch (Exception e) {
+            Log.e(TAG, "Error cleaning old data", e);
+        }
+    }
+
+    private void logDailyRecordsCount() {
+        try {
+            long sevenDaysAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L);
+            List<WeatherDao.DayCountResult> counts = weatherDao.getRecordsCountPerDay(sevenDaysAgo);
+
+        } catch (Exception e) {
+            Log.e(TAG, "Error logging daily records count", e);
+        }
+    }
+
+    private boolean isValidCoordinate(double latitude, double longitude) {
+        return latitude >= -90.0 && latitude <= 90.0 &&
+                longitude >= -180.0 && longitude <= 180.0 &&
+                latitude != 0.0 && longitude != 0.0;
     }
 }

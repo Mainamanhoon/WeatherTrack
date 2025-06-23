@@ -62,8 +62,7 @@ public class WeatherForecastAdapter extends RecyclerView.Adapter<WeatherForecast
             tvTemperature = itemView.findViewById(R.id.tvTemperature);
             ivWeatherIcon = itemView.findViewById(R.id.ivWeatherIcon);
 
-            // Set click listener for the entire item
-            itemView.setOnClickListener(v -> {
+             itemView.setOnClickListener(v -> {
                 int position = getAdapterPosition();
                 if (position != RecyclerView.NO_POSITION && position < weatherList.size()) {
                     WeatherResponse selectedWeather = weatherList.get(position);
@@ -75,23 +74,28 @@ public class WeatherForecastAdapter extends RecyclerView.Adapter<WeatherForecast
         }
 
         public void bind(WeatherResponse weather, int position) {
-            // Format date from timestamp
-            String dateStr = formatDate(weather.dt * 1000); // dt is in seconds
+
+            String dateStr = formatDate(weather.dt * 1000);
             tvDate.setText(dateStr);
 
-            // Set day label
-            String dayLabel = getDayLabel(position);
+             String dayLabel = getDayLabel(position);
             tvDayLabel.setText(dayLabel);
 
-            // Set temperature (using temp and feels_like)
-            if (weather.main != null) {
-                int temp = (int) Math.round(weather.main.temp);
-                int feelsLike = (int) Math.round(weather.main.feels_like);
-                tvTemperature.setText(temp + "° " + feelsLike + "°");
+             if (weather.main != null) {
+                String tempText;
+                if (weather.main.temp_min > 0 && weather.main.temp_max > 0) {
+                     int minTemp = (int) Math.round(weather.main.temp_min);
+                    int maxTemp = (int) Math.round(weather.main.temp_max);
+                    tempText = minTemp + "° " + maxTemp + "°";
+                } else {
+                     int temp = (int) Math.round(weather.main.temp);
+                    int feelsLike = (int) Math.round(weather.main.feels_like);
+                    tempText = temp + "° " + feelsLike + "°";
+                }
+                tvTemperature.setText(tempText);
             }
 
-            // Set weather icon
-            if (weather.weather != null && !weather.weather.isEmpty()) {
+             if (weather.weather != null && !weather.weather.isEmpty()) {
                 String mainWeather = weather.weather.get(0).main;
                 setWeatherIcon(mainWeather);
             }
@@ -103,28 +107,42 @@ public class WeatherForecastAdapter extends RecyclerView.Adapter<WeatherForecast
         }
 
         private String getDayLabel(int position) {
-            // Since we're showing past 7 days, we need to go backwards from today
-            Calendar cal = Calendar.getInstance();
-            cal.add(Calendar.DAY_OF_YEAR, -(weatherList.size() - 1 - position)); // Reverse order
 
             Calendar today = Calendar.getInstance();
-            long diffDays = (today.getTimeInMillis() - cal.getTimeInMillis()) / (24 * 60 * 60 * 1000);
+            Calendar itemDate = Calendar.getInstance();
+            itemDate.add(Calendar.DAY_OF_YEAR, -position);
 
-            if (diffDays == 0) return "Today";
-            if (diffDays == 1) return "Yesterday";
-            if (diffDays < 7) return diffDays + " days ago";
+             long diffInMillis = today.getTimeInMillis() - itemDate.getTimeInMillis();
+            int daysDiff = (int) (diffInMillis / (24 * 60 * 60 * 1000));
 
-            SimpleDateFormat sdf = new SimpleDateFormat("EEE", Locale.getDefault());
-            return sdf.format(cal.getTime());
+            switch (daysDiff) {
+                case 0:
+                    return "Today";
+                case 1:
+                    return "Yesterday";
+                case 2:
+                    return "2 days ago";
+                case 3:
+                    return "3 days ago";
+                case 4:
+                    return "4 days ago";
+                case 5:
+                    return "5 days ago";
+                case 6:
+                    return "6 days ago";
+                default:
+                     SimpleDateFormat sdf = new SimpleDateFormat("EEEE", Locale.getDefault());
+                    return sdf.format(itemDate.getTime());
+            }
         }
 
         private void setWeatherIcon(String weatherMain) {
-            int iconRes = R.drawable.cloudy_sunny; // default
+            int iconRes = R.drawable.cloudy_sunny;
 
             if (weatherMain != null) {
                 switch (weatherMain.toLowerCase()) {
                     case "clear":
-                        iconRes = R.drawable.cloudy_sunny; // You might want to add a sunny icon
+                        iconRes = R.drawable.cloudy_sunny;
                         break;
                     case "clouds":
                         iconRes = R.drawable.cloudy_sunny;
@@ -134,10 +152,10 @@ public class WeatherForecastAdapter extends RecyclerView.Adapter<WeatherForecast
                         iconRes = R.drawable.umbrella;
                         break;
                     case "thunderstorm":
-                        iconRes = R.drawable.umbrella; // You might want to add a thunderstorm icon
+                        iconRes = R.drawable.umbrella;
                         break;
                     case "snow":
-                        iconRes = R.drawable.cloudy_sunny; // You might want to add a snow icon
+                        iconRes = R.drawable.cloudy_sunny;
                         break;
                     case "mist":
                     case "smoke":
@@ -148,7 +166,7 @@ public class WeatherForecastAdapter extends RecyclerView.Adapter<WeatherForecast
                     case "ash":
                     case "squall":
                     case "tornado":
-                        iconRes = R.drawable.cloudy_sunny; // You might want to add specific icons
+                        iconRes = R.drawable.cloudy_sunny;
                         break;
                     default:
                         iconRes = R.drawable.cloudy_sunny;
